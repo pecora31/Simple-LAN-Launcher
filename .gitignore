@@ -1,0 +1,25 @@
+# Rust & Cargo build artifacts
+target/
+**/target/
+**/*.rs.bk
+
+# Tauri build artifacts
+src-tauri/gen/schemas
+
+# Node / JS
+node_modules/
+.npm
+dist/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Local runtime & user test configs
+profiles.json
+*.ini
+*.log

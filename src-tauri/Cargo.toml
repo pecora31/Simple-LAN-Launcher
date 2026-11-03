@@ -1,0 +1,31 @@
+[package]
+name = "simple-lan-launcher"
+version = "1.0.0"
+description = "Modern, ultra-fast LAN Launcher for Age of Empires II: Definitive Edition"
+authors = ["pecora31"]
+repository = "https://github.com/pecora31/Simple-LAN-Launcher"
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4" }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.5" }
+tauri-plugin-log = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

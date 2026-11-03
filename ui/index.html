@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple LAN Launcher</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="preload">
+  <!-- Custom Title Bar -->
+  <header class="titlebar" data-tauri-drag-region>
+    <!-- Chrome-Style Profile Tabs -->
+    <div class="chrome-tabs-container">
+      <div class="chrome-tabs-list" id="chrome-tabs-list">
+        <!-- Continuous Sliding Active Tab Notch with Concave Inverted Fillets -->
+        <div class="chrome-active-notch" id="chrome-active-notch">
+          <svg class="notch-fillet notch-fillet-left" viewBox="0 0 9 9" width="9" height="9">
+            <path d="M 0,8 L 0,9 L 9,9 L 9,0 L 8,0 A 8 8 0 0 1 0 8 Z" />
+          </svg>
+          <svg class="notch-fillet notch-fillet-right" viewBox="0 0 9 9" width="9" height="9">
+            <path d="M 0,0 L 0,9 L 9,9 L 9,8 A 8 8 0 0 1 1 0 L 0,0 Z" />
+          </svg>
+        </div>
+      </div>
+      <button class="chrome-tab-add-btn" id="btn-add-profile" title="Add New Profile">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="8" y1="3" x2="8" y2="13" />
+          <line x1="3" y1="8" x2="13" y2="8" />
+        </svg>
+      </button>
+    </div>
+    <div class="titlebar-drag" id="titlebar-drag" data-tauri-drag-region></div>
+    <div class="titlebar-actions">
+      <!-- Theme Switch (Title Bar - Right next to Window Controls) -->
+      <div class="theme-switch-wrapper titlebar-theme-switch" id="theme-switch-btn" title="Toggle Theme (Dark / Light)" role="button" tabindex="0">
+        <div class="theme-switch-track">
+          <div class="theme-switch-thumb"></div>
+        </div>
+      </div>
+    </div>
+    <div class="window-controls">
+      <button class="win-btn" id="btn-min" title="Minimize">—</button>
+      <button class="win-btn win-close" id="btn-close" title="Close">✕</button>
+    </div>
+  </header>
+
+  <!-- Permanent Center Logo & Header (Fixed across both tabs) -->
+  <div class="center-header">
+    <!-- Saved Confirmation Indicator (Pull-out tape measure from left border) -->
+    <div class="save-indicator" id="save-indicator" aria-live="polite">
+      <svg class="save-icon-svg" viewBox="0 0 20 20" width="18" height="18" fill="none">
+        <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.8" />
+        <path d="M 6.2 10.2 L 8.8 12.8 L 13.8 7.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <span class="save-indicator-text">Saved</span>
+    </div>
+
+    <img id="center-logo" src="assets/spartan_light.png" alt="Simple LAN Launcher" class="app-logo" />
+    <h1 class="app-title">Simple LAN Launcher</h1>
+
+    <!-- View Switcher (PLAY | SETTINGS) -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="play">PLAY</button>
+      <button class="nav-tab" data-tab="settings">SETTINGS</button>
+      <div class="nav-indicator"></div>
+    </div>
+  </div>
+
+  <!-- Content Views Container -->
+  <main class="views-container">
+    <!-- VIEW 1: PLAY -->
+    <section id="view-play" class="view active">
+      <div class="form-group">
+        <label for="player-name">Player Name:</label>
+        <div class="input-box">
+          <input type="text" id="player-name" value="" placeholder="Enter player name..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="player-id">Player ID (Account ID):</label>
+        <div class="input-row">
+          <div class="input-box flex-1">
+            <input type="text" id="player-id" value="" placeholder="8-digit ID" maxlength="8" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <button class="btn btn-secondary btn-rnd" id="btn-random">Randomize</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="label-row">
+          <label for="host-ip">Host IP Address (Tailscale, Radmin VPN, or LAN IP):</label>
+          <span class="ping-badge" id="ping-badge"></span>
+        </div>
+        <div class="input-row">
+          <div class="input-box flex-1">
+            <input type="text" id="host-ip" value="" placeholder="Enter Host IP..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <button class="btn btn-secondary btn-rnd" id="btn-diag-play">Test IP</button>
+        </div>
+      </div>
+
+      <!-- UNIFIED LAUNCH BUTTON (Continuous Fused Silhouette) -->
+      <div class="unified-launch-container" data-notch="0">
+        <div class="mode-bar">
+          <button class="mode-tab active" data-mode="0">CLIENT</button>
+          <button class="mode-tab" data-mode="1">HOST + CLIENT</button>
+          <button class="mode-tab" data-mode="2">SERVER ONLY</button>
+          <div class="active-notch" id="active-notch">
+            <!-- Left & Right Inverted Fillets (Gân trợ lực tiếp giáp với overlap chống vạch mờ) -->
+            <svg class="notch-fillet notch-fillet-left" viewBox="0 0 9 9" width="9" height="9">
+              <path d="M 0,8 L 0,9 L 9,9 L 9,0 L 8,0 A 8 8 0 0 1 0 8 Z" />
+            </svg>
+            <svg class="notch-fillet notch-fillet-right" viewBox="0 0 9 9" width="9" height="9">
+              <path d="M 0,0 L 0,9 L 9,9 L 9,8 A 8 8 0 0 1 1 0 L 0,0 Z" />
+            </svg>
+          </div>
+        </div>
+        <button class="launch-btn" id="btn-launch">
+          <span class="launch-icon">▶</span>
+          <span class="launch-text">LAUNCH</span>
+        </button>
+      </div>
+
+      <!-- Stop Processes Button -->
+      <button class="btn btn-stop" id="btn-stop">STOP GAME PROCESSES</button>
+
+      <!-- Save Profile Button (directly below Stop Processes) -->
+      <button class="btn btn-save-profile" id="btn-save-profile">SAVE PROFILE</button>
+
+      <!-- Footer Info -->
+      <div class="view-footer">
+        <span class="status-text" id="status-play">Ready</span>
+        <span class="version-text">v1.0.0</span>
+      </div>
+    </section>
+
+    <!-- VIEW 2: SETTINGS -->
+    <section id="view-settings" class="view">
+      <div class="form-group">
+        <label for="game-path">Game Path (AoE2DE_s.exe):</label>
+        <div class="input-row">
+          <div class="input-box flex-1">
+            <input type="text" id="game-path" placeholder="Path to AoE2DE_s.exe" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <button class="btn btn-secondary btn-browse" id="btn-browse">Browse...</button>
+        </div>
+      </div>
+
+      <div class="checkbox-group">
+        <label class="custom-checkbox">
+          <input type="checkbox" id="chk-disable-uhd" checked />
+          <span class="checkmark"></span>
+          <span class="chk-label">Disable UHD Graphics</span>
+        </label>
+        <p class="chk-hint">Check this if Enhanced Graphics Pack is not installed</p>
+      </div>
+
+      <!-- KEYBOARD SHORTCUTS & BINDINGS -->
+      <div class="section-divider">
+        <span>Keyboard Shortcuts:</span>
+      </div>
+
+      <div class="checkbox-group">
+        <label class="custom-checkbox">
+          <input type="checkbox" id="chk-enable-hotkeys" />
+          <span class="checkmark"></span>
+          <span class="chk-label">Enable Keyboard Shortcuts</span>
+        </label>
+        <p class="chk-hint">Disable to prevent accidental triggering on sensitive HE keyboards</p>
+      </div>
+
+      <div class="keybinds-box hidden" id="keybinds-box">
+        <div class="keybind-row">
+          <span class="keybind-label">Launch Game:</span>
+          <button class="keybind-btn" id="kb-launch" data-action="launch" data-key="Enter">Enter</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Switch View (Play / Settings):</span>
+          <button class="keybind-btn" id="kb-switch-tab" data-action="switchTab" data-key="Tab">Tab</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Stop Game Processes:</span>
+          <button class="keybind-btn" id="kb-stop" data-action="stop" data-key="F12">F12</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Randomize Player ID:</span>
+          <button class="keybind-btn" id="kb-random-id" data-action="randomId" data-key="F8">F8</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Test Host IP:</span>
+          <button class="keybind-btn" id="kb-test-ip" data-action="testIp" data-key="F6">F6</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">New Profile:</span>
+          <button class="keybind-btn" id="kb-new-profile" data-action="newProfile" data-key="Ctrl+T">Ctrl+T</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Delete Active Profile:</span>
+          <button class="keybind-btn" id="kb-close-profile" data-action="closeProfile" data-key="Ctrl+W">Ctrl+W</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Switch to Profile 1:</span>
+          <button class="keybind-btn" id="kb-profile-1" data-action="profile1" data-key="Ctrl+1">Ctrl+1</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Switch to Profile 2:</span>
+          <button class="keybind-btn" id="kb-profile-2" data-action="profile2" data-key="Ctrl+2">Ctrl+2</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Switch to Profile 3:</span>
+          <button class="keybind-btn" id="kb-profile-3" data-action="profile3" data-key="Ctrl+3">Ctrl+3</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Switch to Profile 4:</span>
+          <button class="keybind-btn" id="kb-profile-4" data-action="profile4" data-key="Ctrl+4">Ctrl+4</button>
+        </div>
+        <div class="keybind-row">
+          <span class="keybind-label">Switch to Profile 5:</span>
+          <button class="keybind-btn" id="kb-profile-5" data-action="profile5" data-key="Ctrl+5">Ctrl+5</button>
+        </div>
+      </div>
+
+      <div class="section-divider">
+        <span>System & Network Tools:</span>
+      </div>
+
+      <div class="tools-grid">
+        <button class="btn btn-tool" id="btn-save">Save Settings</button>
+        <button class="btn btn-tool" id="btn-reset">Reset Defaults</button>
+        <button class="btn btn-tool" id="btn-logs">Crash Logs</button>
+        <button class="btn btn-tool" id="btn-diag">Test Connection</button>
+        <button class="btn btn-tool" id="btn-firewall">Unblock Firewall</button>
+        <button class="btn btn-tool" id="btn-updates">Check Updates</button>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="view-footer">
+        <span class="status-text" id="status-settings">Ready</span>
+        <span class="version-text">v1.0.0</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- VERSION & UPDATES MODAL -->
+  <div class="modal-overlay" id="modal-updates">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Version & Updates</h3>
+        <button class="modal-close-btn" id="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-info-row">
+          <span class="info-label">AoE2 DE Version:</span>
+          <span class="info-val" id="val-game-ver">Detecting...</span>
+        </div>
+        <div class="modal-info-row">
+          <span class="info-label">ageLANServer:</span>
+          <span class="info-val" id="val-lan-ver">Detecting...</span>
+        </div>
+        <div class="modal-status-box" id="update-status-msg">
+          Ready to check GitHub releases.
+        </div>
+        <div class="modal-btn-row">
+          <button class="btn btn-primary-modal" id="btn-modal-update">Check ageLANServer Updates</button>
+          <button class="btn btn-secondary-modal" id="btn-modal-close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MINIMAL UNIFIED DIALOG (NO TITLEBAR) -->
+  <div class="modal-overlay" id="custom-dialog-modal">
+    <div class="dialog-clean-card">
+      <div class="dialog-msg" id="custom-dialog-msg">Delete Profile?</div>
+      <div id="custom-dialog-input-wrapper" style="display: none; width: 100%; margin-top: 14px;">
+        <input type="text" id="custom-dialog-input" class="dialog-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+      </div>
+      <div class="dialog-btn-row">
+        <button class="dialog-btn dialog-btn-cancel" id="custom-dialog-cancel">Cancel</button>
+        <button class="dialog-btn dialog-btn-confirm" id="custom-dialog-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB CONTEXT MENU (RIGHT-CLICK) -->
+  <div class="tab-context-menu" id="tab-context-menu">
+    <div class="ctx-item" id="ctx-rename">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 2a2 2 0 0 1 2.8 2.8l-8 8L2 14l1.2-3.8 8-8z"/>
+      </svg>
+      <span>Rename Profile</span>
+    </div>
+    <div class="ctx-item ctx-danger" id="ctx-delete">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 4h10M6 4V2.5A1.5 1.5 0 0 1 7.5 1h1A1.5 1.5 0 0 1 10 2.5V4M5 7v5M8 7v5M11 7v5M4 4l.8 9.5a1.5 1.5 0 0 0 1.5 1.5h3.4a1.5 1.5 0 0 0 1.5-1.5L12 4"/>
+      </svg>
+      <span>Delete Profile</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
