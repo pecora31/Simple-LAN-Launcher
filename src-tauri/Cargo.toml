@@ -1,7 +1,7 @@
 [package]
 name = "simple-lan-launcher"
-version = "1.0.0"
-description = "Modern, ultra-fast LAN Launcher for Age of Empires II: Definitive Edition"
+version = "2.0.0"
+description = "LAN Launcher for Age of Empires II: Definitive Edition"
 authors = ["pecora31"]
 repository = "https://github.com/pecora31/Simple-LAN-Launcher"
 edition = "2024"
