@@ -12,7 +12,6 @@ LAN launcher for Age of Empires II: Definitive Edition, built with Rust and Taur
 ## Installation
 
 - Full package: Download `Simple-LAN-Launcher-v2.0.0-Full.zip` from Releases, extract to any folder, and run `Simple-LAN-Launcher.exe`.
-- Standalone: Download `simple-lan-launcher.exe` and place it in your game root directory or next to an existing `_SETUP` folder.
 
 ## Building from Source
 
