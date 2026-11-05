@@ -38,7 +38,32 @@ const inputPlayerId = document.getElementById('player-id');
 const inputHostIp = document.getElementById('host-ip');
 const inputGamePath = document.getElementById('game-path');
 const chkDisableUhd = document.getElementById('chk-disable-uhd');
+const chkSkipIntro = document.getElementById('chk-skip-intro');
 const pingBadge = document.getElementById('ping-badge');
+
+let currentLaunchState = 'idle'; // 'idle' | 'launching' | 'in-game'
+
+function setLaunchButtonState(state) {
+  currentLaunchState = state;
+  const btn = document.getElementById('btn-launch');
+  const txt = btn?.querySelector('.launch-text');
+  const icon = btn?.querySelector('.launch-icon');
+  if (!btn || !txt) return;
+
+  if (state === 'launching') {
+    if (icon) icon.style.display = 'none';
+    txt.textContent = 'LAUNCHING...';
+    btn.style.pointerEvents = 'none';
+  } else if (state === 'in-game') {
+    if (icon) icon.style.display = 'none';
+    txt.textContent = 'IN-GAME';
+    btn.style.pointerEvents = 'none';
+  } else {
+    if (icon) icon.style.display = 'inline-block';
+    txt.textContent = 'LAUNCH';
+    btn.style.pointerEvents = 'auto';
+  }
+}
 
 // Keybind Controls
 const chkEnableHotkeys = document.getElementById('chk-enable-hotkeys');
@@ -142,6 +167,8 @@ modeTabs.forEach(tab => {
 
 // Launch Button Click
 document.getElementById('btn-launch')?.addEventListener('click', async () => {
+  if (currentLaunchState !== 'idle') return;
+
   const pName = inputPlayerName.value.trim();
   if (!pName) {
     updateStatus('Please enter your Player Name before launching!');
@@ -156,11 +183,13 @@ document.getElementById('btn-launch')?.addEventListener('click', async () => {
   }
 
   await saveCurrentSettings(true, false);
+  setLaunchButtonState('launching');
   updateStatus('Launching game client / server...');
   try {
     const res = await invoke('launch_game', { mode: currentMode });
     if (res) updateStatus(res);
   } catch (err) {
+    setLaunchButtonState('idle');
     updateStatus(`Launch error: ${err}`);
   }
 });
@@ -225,6 +254,7 @@ document.getElementById('btn-stop')?.addEventListener('click', async () => {
   updateStatus('Stopping game & server processes...');
   try {
     const res = await invoke('stop_processes');
+    setLaunchButtonState('idle');
     updateStatus(res || 'Processes stopped.');
   } catch (err) {
     updateStatus(`Error: ${err}`);
@@ -331,6 +361,7 @@ function updateActiveProfileFromUI() {
     active.hostIp = inputHostIp.value.trim();
     active.gamePath = inputGamePath.value.trim();
     active.disableUhd = chkDisableUhd.checked;
+    active.skipIntro = chkSkipIntro ? chkSkipIntro.checked : true;
     active.launchMode = currentMode;
   }
 }
@@ -344,6 +375,9 @@ function applyProfileToUI(profile) {
   inputHostIp.value = profile.hostIp || '';
   if (profile.gamePath) inputGamePath.value = profile.gamePath;
   chkDisableUhd.checked = typeof profile.disableUhd === 'boolean' ? profile.disableUhd : true;
+  if (chkSkipIntro) {
+    chkSkipIntro.checked = typeof profile.skipIntro === 'boolean' ? profile.skipIntro : true;
+  }
   setLaunchMode(typeof profile.launchMode === 'number' ? profile.launchMode : 0);
 
   if (pingBadge) {
@@ -716,6 +750,7 @@ async function addNewProfile() {
     hostIp: '',
     gamePath: inputGamePath.value.trim(),
     disableUhd: chkDisableUhd.checked,
+    skipIntro: chkSkipIntro ? chkSkipIntro.checked : true,
     launchMode: 0
   };
 
@@ -786,6 +821,7 @@ async function saveCurrentSettings(silent = true, notify = false) {
     hostIp: inputHostIp.value.trim(),
     gamePath: inputGamePath.value.trim(),
     disableUhd: chkDisableUhd.checked,
+    skipIntro: chkSkipIntro ? chkSkipIntro.checked : true,
     theme: currentTheme,
     enableHotkeys: chkEnableHotkeys ? chkEnableHotkeys.checked : false,
     keyLaunch: kbLaunch ? kbLaunch.dataset.key : 'Enter',
@@ -834,6 +870,7 @@ document.getElementById('btn-reset')?.addEventListener('click', async () => {
     inputPlayerId.value = generateRandom8DigitId();
     inputHostIp.value = '';
     chkDisableUhd.checked = true;
+    if (chkSkipIntro) chkSkipIntro.checked = true;
     await saveCurrentSettings(true);
     updateStatus('Settings reset to defaults.');
   }
@@ -1218,6 +1255,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         kbProfile5.dataset.key = data.keyProfile5;
         kbProfile5.textContent = data.keyProfile5;
       }
+
+      if (typeof data.skipIntro === 'boolean' && chkSkipIntro) {
+        chkSkipIntro.checked = data.skipIntro;
+      }
     }
   } catch (err) {
     console.error('Error loading settings:', err);
@@ -1225,12 +1266,45 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Auto-save on any input modification or blur
-  [inputPlayerName, inputPlayerId, inputHostIp, inputGamePath, chkDisableUhd].forEach(el => {
+  [inputPlayerName, inputPlayerId, inputHostIp, inputGamePath, chkDisableUhd, chkSkipIntro].forEach(el => {
     if (el) {
       el.addEventListener('change', () => saveCurrentSettings(true));
       el.addEventListener('blur', () => saveCurrentSettings(true));
     }
   });
+
+  // Listen for background game status events (emitted by Rust backend)
+  const listenFn = (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen)
+    ? window.__TAURI__.event.listen
+    : null;
+
+  if (listenFn) {
+    try {
+      listenFn('game-status', (event) => {
+        if (event && event.payload) {
+          setLaunchButtonState(event.payload);
+        }
+      });
+    } catch (err) {
+      console.warn('Error setting up game-status listener:', err);
+    }
+  }
+
+  // Periodic status poll (sync button state if launched externally or closed)
+  setInterval(async () => {
+    try {
+      const status = await invoke('check_game_status');
+      if (status === 'in-game') {
+        if (currentLaunchState !== 'in-game') {
+          setLaunchButtonState('in-game');
+        }
+      } else if (status === 'idle') {
+        if (currentLaunchState !== 'launching' && currentLaunchState !== 'idle') {
+          setLaunchButtonState('idle');
+        }
+      }
+    } catch (_) {}
+  }, 2500);
 
   if (document.fonts) {
     document.fonts.ready.then(() => {

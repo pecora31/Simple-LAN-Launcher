@@ -5,7 +5,9 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use tauri::{Manager, Window};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, Window};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -24,6 +26,10 @@ fn generate_random_8digit_id() -> String {
     id.to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -31,7 +37,10 @@ pub struct AppSettings {
     pub player_id: String,
     pub host_ip: String,
     pub game_path: String,
+    #[serde(default = "default_true")]
     pub disable_uhd: bool,
+    #[serde(default = "default_true")]
+    pub skip_intro: bool,
     pub theme: String,
     pub enable_hotkeys: bool,
     pub key_launch: String,
@@ -56,6 +65,7 @@ impl Default for AppSettings {
             host_ip: String::new(),
             game_path: String::new(),
             disable_uhd: true,
+            skip_intro: true,
             theme: "dark".to_string(),
             enable_hotkeys: false,
             key_launch: "Enter".to_string(),
@@ -167,6 +177,11 @@ fn load_settings() -> Result<AppSettings, String> {
                         let val = t["disableuhd=".len()..].trim();
                         if let Ok(b) = val.parse::<bool>() {
                             settings.disable_uhd = b;
+                        }
+                    } else if t.to_lowercase().starts_with("skipintro=") {
+                        let val = t["skipintro=".len()..].trim();
+                        if let Ok(b) = val.parse::<bool>() {
+                            settings.skip_intro = b;
                         }
                     } else if t.to_lowercase().starts_with("theme=") {
                         let val = t["theme=".len()..].trim();
@@ -307,12 +322,13 @@ fn save_settings(settings: AppSettings) -> Result<(), String> {
     ];
 
     let ini_content = format!(
-        "[Settings]\nPlayerName={}\nPlayerId={}\nHostIp={}\nGamePath={}\nDisableUHD={}\nTheme={}\nEnableHotkeys={}\nKeyLaunch={}\nKeyStop={}\nKeySwitchTab={}\nKeyRandomId={}\nKeyTestIp={}\nKeyNewProfile={}\nKeyCloseProfile={}\nKeyProfile1={}\nKeyProfile2={}\nKeyProfile3={}\nKeyProfile4={}\nKeyProfile5={}\n",
+        "[Settings]\nPlayerName={}\nPlayerId={}\nHostIp={}\nGamePath={}\nDisableUHD={}\nSkipIntro={}\nTheme={}\nEnableHotkeys={}\nKeyLaunch={}\nKeyStop={}\nKeySwitchTab={}\nKeyRandomId={}\nKeyTestIp={}\nKeyNewProfile={}\nKeyCloseProfile={}\nKeyProfile1={}\nKeyProfile2={}\nKeyProfile3={}\nKeyProfile4={}\nKeyProfile5={}\n",
         settings.player_name.trim(),
         settings.player_id.trim(),
         settings.host_ip.trim(),
         settings.game_path.trim(),
         settings.disable_uhd,
+        settings.skip_intro,
         settings.theme.trim(),
         settings.enable_hotkeys,
         settings.key_launch.trim(),
@@ -406,7 +422,11 @@ pub struct Profile {
     pub player_id: String,
     pub host_ip: String,
     pub game_path: String,
+    #[serde(default = "default_true")]
     pub disable_uhd: bool,
+    #[serde(default = "default_true")]
+    pub skip_intro: bool,
+    #[serde(default)]
     pub launch_mode: u32,
 }
 
@@ -449,6 +469,7 @@ fn load_profiles() -> Result<ProfilesData, String> {
         host_ip: cur_settings.host_ip,
         game_path: cur_settings.game_path,
         disable_uhd: cur_settings.disable_uhd,
+        skip_intro: cur_settings.skip_intro,
         launch_mode: 0,
     };
 
@@ -479,6 +500,7 @@ fn save_profiles(data: ProfilesData) -> Result<(), String> {
             host_ip: active.host_ip.clone(),
             game_path: active.game_path.clone(),
             disable_uhd: active.disable_uhd,
+            skip_intro: active.skip_intro,
             theme: cur_settings.theme,
             enable_hotkeys: cur_settings.enable_hotkeys,
             key_launch: cur_settings.key_launch,
@@ -591,19 +613,32 @@ fn is_game_running() -> bool {
 }
 
 fn monitor_game_and_restore(window: Window) {
+    let w_clone = window.clone();
     std::thread::spawn(move || {
-        // Wait 8 seconds for game client to boot
-        std::thread::sleep(Duration::from_secs(8));
-        loop {
-            std::thread::sleep(Duration::from_secs(2));
-            if !is_game_running() {
-                // Game ended, restore and focus launcher
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+        let _ = w_clone.emit("game-status", "launching");
+        let mut started = false;
+        for _ in 0..60 {
+            std::thread::sleep(Duration::from_millis(500));
+            if is_game_running() {
+                started = true;
                 break;
             }
         }
+
+        if started {
+            let _ = w_clone.emit("game-status", "in-game");
+            loop {
+                std::thread::sleep(Duration::from_secs(2));
+                if !is_game_running() {
+                    break;
+                }
+            }
+        }
+
+        let _ = w_clone.emit("game-status", "idle");
+        let _ = w_clone.show();
+        let _ = w_clone.unminimize();
+        let _ = w_clone.set_focus();
     });
 }
 
@@ -669,9 +704,16 @@ async fn launch_game(window: Window, mode: u32) -> Result<String, String> {
                     cmd_args.push("true".to_string());
                 }
 
+                let mut extra_args = Vec::new();
                 if settings.disable_uhd {
+                    extra_args.push("-NOTEXTURESTREAMING");
+                }
+                if settings.skip_intro {
+                    extra_args.push("-novid");
+                }
+                if !extra_args.is_empty() {
                     cmd_args.push("-i".to_string());
-                    cmd_args.push("-NOTEXTURESTREAMING".to_string());
+                    cmd_args.push(extra_args.join(" "));
                 }
 
                 let mut cmd = Command::new(l_exe);
@@ -686,8 +728,8 @@ async fn launch_game(window: Window, mode: u32) -> Result<String, String> {
                 // Automatically hide all background helper consoles (BattleServer, server.exe, etc.)
                 win_util::hide_secondary_consoles();
 
-                // Auto-minimize launcher to taskbar and monitor game exit
-                let _ = window.minimize();
+                // Auto-hide launcher to system tray and monitor game exit
+                let _ = window.hide();
                 monitor_game_and_restore(window);
 
                 return Ok("Game client launched via LAN launcher.".to_string());
@@ -700,6 +742,9 @@ async fn launch_game(window: Window, mode: u32) -> Result<String, String> {
             if settings.disable_uhd {
                 args.push("-NOTEXTURESTREAMING");
             }
+            if settings.skip_intro {
+                args.push("-novid");
+            }
 
             Command::new(g_path)
                 .args(&args)
@@ -707,7 +752,7 @@ async fn launch_game(window: Window, mode: u32) -> Result<String, String> {
                 .spawn()
                 .map_err(|e| format!("Failed to spawn game executable: {}", e))?;
 
-            let _ = window.minimize();
+            let _ = window.hide();
             monitor_game_and_restore(window);
 
             return Ok("Game client launched directly.".to_string());
@@ -977,13 +1022,22 @@ async fn test_host_ping(host: String) -> Result<PingResult, String> {
 }
 
 #[tauri::command]
+fn check_game_status() -> Result<String, String> {
+    if is_game_running() {
+        Ok("in-game".to_string())
+    } else {
+        Ok("idle".to_string())
+    }
+}
+
+#[tauri::command]
 fn start_drag(window: Window) -> Result<(), String> {
     window.start_dragging().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn minimize_window(window: Window) -> Result<(), String> {
-    window.minimize().map_err(|e| e.to_string())
+    window.hide().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1010,6 +1064,51 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
         .setup(move |app| {
+            // Build system tray
+            let show_item = MenuItem::with_id(app, "show", "Show Launcher", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("Simple LAN Launcher")
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let is_vis = window.is_visible().unwrap_or(false);
+                            if is_vis {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            let _tray = tray_builder.build(app)?;
+
             if let Some(listener) = single_instance_listener {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -1032,6 +1131,7 @@ pub fn run() {
             load_profiles,
             save_profiles,
             launch_game,
+            check_game_status,
             stop_processes,
             browse_game_file,
             open_crash_logs,
