@@ -26,6 +26,10 @@ fn generate_random_8digit_id() -> String {
     id.to_string()
 }
 
+fn default_close_action() -> String {
+    "ask".to_string()
+}
+
 fn default_true() -> bool {
     true
 }
@@ -42,6 +46,8 @@ pub struct AppSettings {
     #[serde(default = "default_true")]
     pub skip_intro: bool,
     pub theme: String,
+    #[serde(default = "default_close_action")]
+    pub close_action: String,
     pub enable_hotkeys: bool,
     pub key_launch: String,
     pub key_stop: String,
@@ -67,6 +73,7 @@ impl Default for AppSettings {
             disable_uhd: true,
             skip_intro: true,
             theme: "dark".to_string(),
+            close_action: "ask".to_string(),
             enable_hotkeys: false,
             key_launch: "Enter".to_string(),
             key_stop: "F12".to_string(),
@@ -186,6 +193,11 @@ fn load_settings() -> Result<AppSettings, String> {
                     } else if t.to_lowercase().starts_with("theme=") {
                         let val = t["theme=".len()..].trim();
                         settings.theme = val.to_lowercase();
+                    } else if t.to_lowercase().starts_with("closeaction=") {
+                        let val = t["closeaction=".len()..].trim();
+                        if !val.is_empty() {
+                            settings.close_action = val.to_lowercase();
+                        }
                     } else if t.to_lowercase().starts_with("enablehotkeys=") {
                         let val = t["enablehotkeys=".len()..].trim();
                         if let Ok(b) = val.parse::<bool>() {
@@ -322,7 +334,7 @@ fn save_settings(settings: AppSettings) -> Result<(), String> {
     ];
 
     let ini_content = format!(
-        "[Settings]\nPlayerName={}\nPlayerId={}\nHostIp={}\nGamePath={}\nDisableUHD={}\nSkipIntro={}\nTheme={}\nEnableHotkeys={}\nKeyLaunch={}\nKeyStop={}\nKeySwitchTab={}\nKeyRandomId={}\nKeyTestIp={}\nKeyNewProfile={}\nKeyCloseProfile={}\nKeyProfile1={}\nKeyProfile2={}\nKeyProfile3={}\nKeyProfile4={}\nKeyProfile5={}\n",
+        "[Settings]\nPlayerName={}\nPlayerId={}\nHostIp={}\nGamePath={}\nDisableUHD={}\nSkipIntro={}\nTheme={}\nCloseAction={}\nEnableHotkeys={}\nKeyLaunch={}\nKeyStop={}\nKeySwitchTab={}\nKeyRandomId={}\nKeyTestIp={}\nKeyNewProfile={}\nKeyCloseProfile={}\nKeyProfile1={}\nKeyProfile2={}\nKeyProfile3={}\nKeyProfile4={}\nKeyProfile5={}\n",
         settings.player_name.trim(),
         settings.player_id.trim(),
         settings.host_ip.trim(),
@@ -330,6 +342,7 @@ fn save_settings(settings: AppSettings) -> Result<(), String> {
         settings.disable_uhd,
         settings.skip_intro,
         settings.theme.trim(),
+        settings.close_action.trim(),
         settings.enable_hotkeys,
         settings.key_launch.trim(),
         settings.key_stop.trim(),
@@ -502,6 +515,7 @@ fn save_profiles(data: ProfilesData) -> Result<(), String> {
             disable_uhd: active.disable_uhd,
             skip_intro: active.skip_intro,
             theme: cur_settings.theme,
+            close_action: cur_settings.close_action,
             enable_hotkeys: cur_settings.enable_hotkeys,
             key_launch: cur_settings.key_launch,
             key_stop: cur_settings.key_stop,
@@ -729,7 +743,7 @@ async fn launch_game(window: Window, mode: u32) -> Result<String, String> {
                 win_util::hide_secondary_consoles();
 
                 // Auto-hide launcher to system tray and monitor game exit
-                let _ = window.hide();
+                // Keep window visible so player can track real-time progress
                 monitor_game_and_restore(window);
 
                 return Ok("Game client launched via LAN launcher.".to_string());
@@ -752,7 +766,7 @@ async fn launch_game(window: Window, mode: u32) -> Result<String, String> {
                 .spawn()
                 .map_err(|e| format!("Failed to spawn game executable: {}", e))?;
 
-            let _ = window.hide();
+            // Keep window visible so player can track real-time progress
             monitor_game_and_restore(window);
 
             return Ok("Game client launched directly.".to_string());
@@ -1037,6 +1051,11 @@ fn start_drag(window: Window) -> Result<(), String> {
 
 #[tauri::command]
 fn minimize_window(window: Window) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn hide_to_tray(window: Window) -> Result<(), String> {
     window.hide().map_err(|e| e.to_string())
 }
 
@@ -1142,6 +1161,7 @@ pub fn run() {
             test_host_ping,
             start_drag,
             minimize_window,
+            hide_to_tray,
             close_window,
         ])
         .run(tauri::generate_context!())

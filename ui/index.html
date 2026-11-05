@@ -165,6 +165,23 @@
         <p class="chk-hint">Bypasses startup intros and logos to load straight into the game</p>
       </div>
 
+      <!-- WINDOW CLOSE BEHAVIOR -->
+      <div class="section-divider">
+        <span>Window Behavior:</span>
+      </div>
+
+      <div class="form-group">
+        <label for="select-close-action">When clicking close button (X):</label>
+        <div class="input-box">
+          <select id="select-close-action" style="width: 100%; background: transparent; border: none; color: inherit; font-size: 13px; font-weight: 500; outline: none; cursor: pointer; padding: 2px 0;">
+            <option value="ask" style="background: var(--bg-surface); color: var(--text-main);">Always Ask</option>
+            <option value="tray" style="background: var(--bg-surface); color: var(--text-main);">Minimize to System Tray</option>
+            <option value="quit" style="background: var(--bg-surface); color: var(--text-main);">Exit Application</option>
+          </select>
+        </div>
+        <p class="chk-hint">Configure whether closing the window minimizes to tray or exits</p>
+      </div>
+
       <!-- KEYBOARD SHORTCUTS & BINDINGS -->
       <div class="section-divider">
         <span>Keyboard Shortcuts:</span>
@@ -288,6 +305,27 @@
       <div class="dialog-btn-row">
         <button class="dialog-btn dialog-btn-cancel" id="custom-dialog-cancel">Cancel</button>
         <button class="dialog-btn dialog-btn-confirm" id="custom-dialog-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLOSE CONFIRMATION DIALOG -->
+  <div class="modal-overlay" id="modal-close-confirm">
+    <div class="dialog-clean-card" style="width: 320px; text-align: left; align-items: stretch; padding: 22px 20px 18px 20px;">
+      <div class="dialog-msg" style="text-align: left; font-size: 15px; margin-bottom: 6px;">Close Launcher</div>
+      <p style="font-size: 13px; line-height: 1.45; color: var(--text-dim); margin: 0 0 14px 0;">Minimize to system tray or exit the application completely?</p>
+      
+      <div class="checkbox-group" style="margin-bottom: 18px; padding-left: 2px;">
+        <label class="custom-checkbox">
+          <input type="checkbox" id="chk-close-remember" />
+          <span class="checkmark"></span>
+          <span class="chk-label" style="font-size: 12px; font-weight: 500;">Don't ask again</span>
+        </label>
+      </div>
+
+      <div class="dialog-btn-row" style="gap: 10px;">
+        <button class="dialog-btn dialog-btn-cancel" id="btn-close-tray" style="flex: 1.2;">Minimize to Tray</button>
+        <button class="dialog-btn dialog-btn-confirm" id="btn-close-quit" style="flex: 1;">Exit</button>
       </div>
     </div>
   </div>

@@ -40,6 +40,9 @@ const inputGamePath = document.getElementById('game-path');
 const chkDisableUhd = document.getElementById('chk-disable-uhd');
 const chkSkipIntro = document.getElementById('chk-skip-intro');
 const pingBadge = document.getElementById('ping-badge');
+const selectCloseAction = document.getElementById('select-close-action');
+
+let currentCloseAction = 'ask'; // 'ask' | 'tray' | 'quit'
 
 let currentLaunchState = 'idle'; // 'idle' | 'launching' | 'in-game'
 
@@ -823,6 +826,7 @@ async function saveCurrentSettings(silent = true, notify = false) {
     disableUhd: chkDisableUhd.checked,
     skipIntro: chkSkipIntro ? chkSkipIntro.checked : true,
     theme: currentTheme,
+    closeAction: currentCloseAction,
     enableHotkeys: chkEnableHotkeys ? chkEnableHotkeys.checked : false,
     keyLaunch: kbLaunch ? kbLaunch.dataset.key : 'Enter',
     keyStop: kbStop ? kbStop.dataset.key : 'F12',
@@ -871,6 +875,8 @@ document.getElementById('btn-reset')?.addEventListener('click', async () => {
     inputHostIp.value = '';
     chkDisableUhd.checked = true;
     if (chkSkipIntro) chkSkipIntro.checked = true;
+    currentCloseAction = 'ask';
+    if (selectCloseAction) selectCloseAction.value = 'ask';
     await saveCurrentSettings(true);
     updateStatus('Settings reset to defaults.');
   }
@@ -973,14 +979,63 @@ document.getElementById('btn-min')?.addEventListener('click', async (e) => {
   }
 });
 
-document.getElementById('btn-close')?.addEventListener('click', async (e) => {
+function handleCloseRequest() {
+  if (currentCloseAction === 'tray') {
+    invoke('hide_to_tray');
+    return;
+  }
+  if (currentCloseAction === 'quit') {
+    invoke('close_window');
+    return;
+  }
+
+  // 'ask': Show confirmation modal
+  const modal = document.getElementById('modal-close-confirm');
+  const chkRemember = document.getElementById('chk-close-remember');
+  if (chkRemember) chkRemember.checked = false;
+  if (modal) modal.classList.add('active');
+}
+
+document.getElementById('btn-close-tray')?.addEventListener('click', async () => {
+  const modal = document.getElementById('modal-close-confirm');
+  const chkRemember = document.getElementById('chk-close-remember');
+  if (chkRemember && chkRemember.checked) {
+    currentCloseAction = 'tray';
+    if (selectCloseAction) selectCloseAction.value = 'tray';
+    await saveCurrentSettings(true);
+  }
+  if (modal) modal.classList.remove('active');
+  await invoke('hide_to_tray');
+});
+
+document.getElementById('btn-close-quit')?.addEventListener('click', async () => {
+  const modal = document.getElementById('modal-close-confirm');
+  const chkRemember = document.getElementById('chk-close-remember');
+  if (chkRemember && chkRemember.checked) {
+    currentCloseAction = 'quit';
+    if (selectCloseAction) selectCloseAction.value = 'quit';
+    await saveCurrentSettings(true);
+  }
+  if (modal) modal.classList.remove('active');
+  await invoke('close_window');
+});
+
+document.getElementById('modal-close-confirm')?.addEventListener('click', (e) => {
+  const modal = document.getElementById('modal-close-confirm');
+  if (e.target === modal) {
+    modal.classList.remove('active');
+  }
+});
+
+selectCloseAction?.addEventListener('change', () => {
+  currentCloseAction = selectCloseAction.value;
+  saveCurrentSettings(true);
+});
+
+document.getElementById('btn-close')?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  try {
-    await invoke('close_window');
-  } catch (err) {
-    console.error('Close error:', err);
-  }
+  handleCloseRequest();
 });
 
 // ==========================================
@@ -1044,8 +1099,13 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // ESC: Close version modal if open
+  // ESC: Close modals if open
   if (e.key === 'Escape') {
+    const modalCloseConfirm = document.getElementById('modal-close-confirm');
+    if (modalCloseConfirm && modalCloseConfirm.classList.contains('active')) {
+      modalCloseConfirm.classList.remove('active');
+      return;
+    }
     if (modalUpdates && modalUpdates.classList.contains('active')) {
       closeVersionModal();
       return;
@@ -1258,6 +1318,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       if (typeof data.skipIntro === 'boolean' && chkSkipIntro) {
         chkSkipIntro.checked = data.skipIntro;
+      }
+
+      if (data.closeAction) {
+        currentCloseAction = data.closeAction;
+        if (selectCloseAction) selectCloseAction.value = data.closeAction;
+      } else {
+        currentCloseAction = 'ask';
+        if (selectCloseAction) selectCloseAction.value = 'ask';
       }
     }
   } catch (err) {
