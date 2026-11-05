@@ -61,6 +61,7 @@
     <!-- View Switcher (PLAY | SETTINGS) -->
     <div class="nav-tabs">
       <button class="nav-tab active" data-tab="play">PLAY</button>
+      <button class="nav-tab" data-tab="mods">MODS</button>
       <button class="nav-tab" data-tab="settings">SETTINGS</button>
       <div class="nav-indicator"></div>
     </div>
@@ -135,7 +136,52 @@
       </div>
     </section>
 
-    <!-- VIEW 2: SETTINGS -->
+    <!-- VIEW 2: MODS -->
+    <section id="view-mods" class="view">
+      <div class="form-group">
+        <label for="input-mod-url">Install Mod (Direct Zip Link or Local File):</label>
+        <div class="input-row">
+          <div class="input-box flex-1">
+            <input type="text" id="input-mod-url" placeholder="Paste direct .zip URL or choose file..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <button class="btn btn-secondary btn-browse" id="btn-browse-mod">Browse...</button>
+          <button class="btn btn-primary" id="btn-install-mod" style="min-width: 80px;">Install</button>
+        </div>
+      </div>
+
+      <!-- Mod Progress / Status Bar -->
+      <div id="mod-progress-box" class="mod-progress-box hidden">
+        <div class="mod-progress-info">
+          <span id="mod-progress-label">Processing mod...</span>
+          <span id="mod-progress-percent"></span>
+        </div>
+        <div class="mod-progress-track">
+          <div id="mod-progress-bar" class="mod-progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Installed Mods Header -->
+      <div class="section-divider" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+        <span id="label-installed-mods">Installed Local Mods (0)</span>
+        <button class="btn-text-link" id="btn-open-mods-folder">Open Mods Folder ↗</button>
+      </div>
+
+      <!-- Installed Mods Scrollable List -->
+      <div class="installed-mods-container" id="installed-mods-list">
+        <div class="mods-empty-state" id="mods-empty-state">
+          No local mods installed yet.<br>
+          Paste a direct mod .zip URL or select a zip file above to install.
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="view-footer">
+        <span class="status-text" id="status-mods">Ready</span>
+        <button class="btn-text-link" id="btn-refresh-mods">Refresh List</button>
+      </div>
+    </section>
+
+    <!-- VIEW 3: SETTINGS -->
     <section id="view-settings" class="view">
       <div class="form-group">
         <label for="game-path">Game Path (AoE2DE_s.exe):</label>

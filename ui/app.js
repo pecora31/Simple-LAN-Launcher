@@ -93,7 +93,7 @@ function updateStatus(text, autoClear = true, duration = 3500) {
   }
 
   const setContent = (val, opacity = '1') => {
-    [statusPlay, statusSettings].forEach(el => {
+    [statusPlay, statusSettings, document.getElementById("status-mods")].forEach(el => {
       if (el) {
         el.textContent = val;
         el.style.opacity = opacity;
@@ -105,7 +105,7 @@ function updateStatus(text, autoClear = true, duration = 3500) {
 
   if (autoClear && text !== 'Ready' && text !== '') {
     statusTimer = setTimeout(() => {
-      [statusPlay, statusSettings].forEach(el => {
+      [statusPlay, statusSettings, document.getElementById("status-mods")].forEach(el => {
         if (el) el.style.opacity = '0';
       });
       setTimeout(() => {
@@ -141,6 +141,7 @@ navTabs.forEach(tab => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     const targetView = document.getElementById(`view-${target}`);
     if (targetView) targetView.classList.add('active');
+    if (target === 'mods') refreshInstalledMods();
   });
 });
 
@@ -965,6 +966,181 @@ btnModalUpdate?.addEventListener('click', async () => {
   }
 });
 
+
+// ==========================================
+// 6.2 MOD MANAGER (OFFLINE & LAN)
+// ==========================================
+const inputModUrl = document.getElementById('input-mod-url');
+const btnBrowseMod = document.getElementById('btn-browse-mod');
+const btnInstallMod = document.getElementById('btn-install-mod');
+const btnOpenModsFolder = document.getElementById('btn-open-mods-folder');
+const btnRefreshMods = document.getElementById('btn-refresh-mods');
+const labelInstalledMods = document.getElementById('label-installed-mods');
+const installedModsList = document.getElementById('installed-mods-list');
+
+function setModProgress(show, text = '', percent = 0) {
+  const box = document.getElementById('mod-progress-box');
+  const label = document.getElementById('mod-progress-label');
+  const percentEl = document.getElementById('mod-progress-percent');
+  const bar = document.getElementById('mod-progress-bar');
+  if (!box) return;
+
+  if (!show) {
+    box.classList.add('hidden');
+    if (bar) bar.style.width = '0%';
+    return;
+  }
+
+  box.classList.remove('hidden');
+  if (label) label.textContent = text;
+  if (percentEl) percentEl.textContent = percent > 0 ? `${percent}%` : '';
+  if (bar) bar.style.width = `${percent}%`;
+}
+
+async function refreshInstalledMods() {
+  if (!installedModsList) return;
+
+  try {
+    const mods = await invoke('list_installed_mods');
+    installedModsList.innerHTML = '';
+
+    if (!mods || mods.length === 0) {
+      if (labelInstalledMods) labelInstalledMods.textContent = 'Installed Local Mods (0)';
+      installedModsList.innerHTML = `
+        <div class="mods-empty-state" id="mods-empty-state">
+          No local mods installed yet.<br>
+          Paste a direct mod .zip URL or choose a zip file above to install.
+        </div>
+      `;
+      return;
+    }
+
+    if (labelInstalledMods) labelInstalledMods.textContent = `Installed Local Mods (${mods.length})`;
+
+    mods.forEach(mod => {
+      const card = document.createElement('div');
+      card.className = 'mod-card';
+
+      const left = document.createElement('div');
+      left.className = 'mod-card-left';
+
+      const title = document.createElement('div');
+      title.className = 'mod-card-title';
+      title.textContent = mod.title;
+      title.title = mod.description || mod.title;
+
+      const author = document.createElement('div');
+      author.className = 'mod-card-author';
+      author.textContent = mod.author ? `by ${mod.author}` : mod.folderName;
+
+      left.appendChild(title);
+      left.appendChild(author);
+
+      const actions = document.createElement('div');
+      actions.className = 'mod-card-actions';
+
+      const btnToggle = document.createElement('button');
+      btnToggle.className = `btn-mod-toggle ${mod.enabled ? 'active' : ''}`;
+      btnToggle.textContent = mod.enabled ? 'ENABLED' : 'DISABLED';
+      btnToggle.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const nextState = !mod.enabled;
+        try {
+          await invoke('toggle_mod', { folderName: mod.folderName, enabled: nextState });
+          mod.enabled = nextState;
+          btnToggle.className = `btn-mod-toggle ${nextState ? 'active' : ''}`;
+          btnToggle.textContent = nextState ? 'ENABLED' : 'DISABLED';
+          updateStatus(`Mod "${mod.title}" ${nextState ? 'enabled' : 'disabled'}.`);
+        } catch (err) {
+          updateStatus(`Toggle error: ${err}`);
+        }
+      });
+
+      const btnDel = document.createElement('button');
+      btnDel.className = 'btn-mod-delete';
+      btnDel.title = 'Delete Mod';
+      btnDel.innerHTML = `
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 4h10M6 4V2.5A1.5 1.5 0 0 1 7.5 1h1A1.5 1.5 0 0 1 10 2.5V4M5 7v5M8 7v5M11 7v5M4 4l.8 9.5a1.5 1.5 0 0 0 1.5 1.5h3.4a1.5 1.5 0 0 0 1.5-1.5L12 4"/>
+        </svg>
+      `;
+      btnDel.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const confirmed = await showConfirmDialog(`Delete mod "${mod.title}"?`, 'Delete', 'Cancel');
+        if (confirmed) {
+          try {
+            await invoke('delete_mod', { folderName: mod.folderName });
+            updateStatus(`Deleted mod "${mod.title}".`);
+            await refreshInstalledMods();
+          } catch (err) {
+            updateStatus(`Delete error: ${err}`);
+          }
+        }
+      });
+
+      actions.appendChild(btnToggle);
+      actions.appendChild(btnDel);
+
+      card.appendChild(left);
+      card.appendChild(actions);
+      installedModsList.appendChild(card);
+    });
+  } catch (err) {
+    console.error('Error listing installed mods:', err);
+  }
+}
+
+btnBrowseMod?.addEventListener('click', async () => {
+  try {
+    const selected = await invoke('browse_mod_file');
+    if (selected && inputModUrl) {
+      inputModUrl.value = selected;
+    }
+  } catch (err) {
+    console.error('Error browsing mod file:', err);
+  }
+});
+
+btnInstallMod?.addEventListener('click', async () => {
+  const source = inputModUrl ? inputModUrl.value.trim() : '';
+  if (!source) {
+    updateStatus('Please enter a direct zip URL or click Browse to select a file.');
+    inputModUrl?.focus();
+    return;
+  }
+
+  btnInstallMod.disabled = true;
+  setModProgress(true, 'Preparing to install mod...', 25);
+  updateStatus('Installing mod...');
+
+  try {
+    setModProgress(true, 'Extracting and verifying mod files...', 65);
+    const res = await invoke('install_mod', { source });
+    setModProgress(true, res || 'Installed successfully!', 100);
+    updateStatus(res || 'Mod installed successfully!');
+    if (inputModUrl) inputModUrl.value = '';
+    await refreshInstalledMods();
+    setTimeout(() => {
+      setModProgress(false);
+    }, 2500);
+  } catch (err) {
+    setModProgress(false);
+    await showConfirmDialog(err.toString(), 'OK', '');
+  } finally {
+    btnInstallMod.disabled = false;
+  }
+});
+
+btnOpenModsFolder?.addEventListener('click', async () => {
+  try {
+    await invoke('open_mods_folder');
+  } catch (err) {
+    updateStatus(`Error opening folder: ${err}`);
+  }
+});
+
+btnRefreshMods?.addEventListener('click', refreshInstalledMods);
+
 // ==========================================
 // 7. WINDOW CONTROLS
 // Note: Title bar dragging is natively handled by data-tauri-drag-region
@@ -1199,7 +1375,9 @@ window.addEventListener('keydown', (e) => {
   // Switch View (Play <-> Settings)
   if (kbSwitchTab && matchKey(kbSwitchTab.dataset.key, e)) {
     e.preventDefault();
-    const nextTab = currentTab === 'play' ? 'settings' : 'play';
+    const tabCycle = ['play', 'mods', 'settings'];
+    const curIdx = tabCycle.indexOf(currentTab);
+    const nextTab = tabCycle[(curIdx + 1) % tabCycle.length];
     const targetTabBtn = document.querySelector(`.nav-tab[data-tab="${nextTab}"]`);
     targetTabBtn?.click();
     return;

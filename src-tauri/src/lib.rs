@@ -1044,6 +1044,406 @@ fn check_game_status() -> Result<String, String> {
     }
 }
 
+
+// ==========================================
+// MOD MANAGEMENT FOR AOE2 DE LAN / OFFLINE
+// ==========================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ModItem {
+    pub folder_name: String,
+    pub title: String,
+    pub author: String,
+    pub description: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModStatusEntry {
+    #[serde(rename = "CheckSum", default)]
+    pub check_sum: Option<String>,
+    #[serde(rename = "Enabled")]
+    pub enabled: bool,
+    #[serde(rename = "LastUpdate", default)]
+    pub last_update: Option<String>,
+    #[serde(rename = "Path")]
+    pub path: String,
+    #[serde(rename = "Priority", default)]
+    pub priority: i32,
+    #[serde(rename = "PublishID", default)]
+    pub publish_id: i64,
+    #[serde(rename = "Title")]
+    pub title: String,
+    #[serde(rename = "WorkshopID", default)]
+    pub workshop_id: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ModStatusFile {
+    #[serde(rename = "Mods", default)]
+    pub mods: Vec<ModStatusEntry>,
+    #[serde(rename = "Unsub", default)]
+    pub unsub: Vec<serde_json::Value>,
+}
+
+fn get_aoe2de_user_dir() -> Option<PathBuf> {
+    let user_profile = std::env::var("USERPROFILE").ok()?;
+    let base = PathBuf::from(user_profile).join(r"Games\Age of Empires 2 DE");
+    if !base.exists() {
+        return None;
+    }
+
+    let mut candidates = Vec::new();
+    if let Ok(entries) = fs::read_dir(&base) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                    if name.chars().all(|c| c.is_ascii_digit()) && name != "0" {
+                        if let Ok(meta) = entry.metadata() {
+                            if let Ok(mtime) = meta.modified() {
+                                candidates.push((mtime, p));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+    if let Some((_, p)) = candidates.first() {
+        return Some(p.clone());
+    }
+
+    let f0 = base.join("0");
+    if f0.exists() {
+        return Some(f0);
+    }
+
+    Some(base.join("76561198000000000"))
+}
+
+fn get_local_mods_dir() -> Result<PathBuf, String> {
+    let user_dir = get_aoe2de_user_dir()
+        .ok_or_else(|| "Could not locate Age of Empires 2 DE folder in %USERPROFILE%\\Games.".to_string())?;
+    let local_mods = user_dir.join("mods").join("local");
+    if !local_mods.exists() {
+        let _ = fs::create_dir_all(&local_mods);
+    }
+    Ok(local_mods)
+}
+
+fn get_mod_status_path() -> Result<PathBuf, String> {
+    let user_dir = get_aoe2de_user_dir()
+        .ok_or_else(|| "Could not locate Age of Empires 2 DE folder in %USERPROFILE%\\Games.".to_string())?;
+    let mods_dir = user_dir.join("mods");
+    if !mods_dir.exists() {
+        let _ = fs::create_dir_all(&mods_dir);
+    }
+    Ok(mods_dir.join("mod-status.json"))
+}
+
+fn load_mod_status_file() -> ModStatusFile {
+    if let Ok(path) = get_mod_status_path() {
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(file) = serde_json::from_str::<ModStatusFile>(&content) {
+                    return file;
+                }
+            }
+        }
+    }
+    ModStatusFile::default()
+}
+
+fn save_mod_status_file(file: &ModStatusFile) -> Result<(), String> {
+    let path = get_mod_status_path()?;
+    let json = serde_json::to_string_pretty(file).map_err(|e| e.to_string())?;
+    fs::write(path, json).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct InfoJson {
+    #[serde(default)]
+    pub Title: Option<String>,
+    #[serde(default)]
+    pub Author: Option<String>,
+    #[serde(default)]
+    pub Description: Option<String>,
+}
+
+#[tauri::command]
+fn list_installed_mods() -> Result<Vec<ModItem>, String> {
+    let local_dir = get_local_mods_dir()?;
+    let status_file = load_mod_status_file();
+
+    let mut result = Vec::new();
+    if let Ok(entries) = fs::read_dir(&local_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let folder_name = entry.file_name().to_string_lossy().to_string();
+                if folder_name.starts_with('_') {
+                    continue;
+                }
+                let mut title = folder_name.clone();
+                let mut author = "Local".to_string();
+                let mut description = String::new();
+
+                let info_file = path.join("info.json");
+                if info_file.exists() {
+                    if let Ok(content) = fs::read_to_string(&info_file) {
+                        if let Ok(info) = serde_json::from_str::<InfoJson>(&content) {
+                            if let Some(t) = info.Title { if !t.is_empty() { title = t; } }
+                            if let Some(a) = info.Author { if !a.is_empty() { author = a; } }
+                            if let Some(d) = info.Description { description = d; }
+                        }
+                    }
+                }
+
+                let path_needle_1 = format!("local//{}", folder_name);
+                let path_needle_2 = format!("local/{}", folder_name);
+                let mut enabled = true;
+                if let Some(entry) = status_file.mods.iter().find(|m| {
+                    m.path.eq_ignore_ascii_case(&path_needle_1)
+                        || m.path.eq_ignore_ascii_case(&path_needle_2)
+                        || m.title.eq_ignore_ascii_case(&title)
+                        || m.title.eq_ignore_ascii_case(&folder_name)
+                }) {
+                    enabled = entry.enabled;
+                }
+
+                result.push(ModItem {
+                    folder_name,
+                    title,
+                    author,
+                    description,
+                    enabled,
+                });
+            }
+        }
+    }
+
+    result.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    Ok(result)
+}
+
+#[tauri::command]
+fn toggle_mod(folder_name: String, enabled: bool) -> Result<(), String> {
+    let mut status_file = load_mod_status_file();
+    let path_needle_1 = format!("local//{}", folder_name);
+    let path_needle_2 = format!("local/{}", folder_name);
+
+    if let Some(entry) = status_file.mods.iter_mut().find(|m| {
+        m.path.eq_ignore_ascii_case(&path_needle_1)
+            || m.path.eq_ignore_ascii_case(&path_needle_2)
+            || m.title.eq_ignore_ascii_case(&folder_name)
+    }) {
+        entry.enabled = enabled;
+    } else {
+        status_file.mods.push(ModStatusEntry {
+            check_sum: Some("0".to_string()),
+            enabled,
+            last_update: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+                    .to_string(),
+            ),
+            path: format!("local//{}", folder_name),
+            priority: (status_file.mods.len() + 1) as i32,
+            publish_id: 0,
+            title: folder_name,
+            workshop_id: 0,
+        });
+    }
+
+    save_mod_status_file(&status_file)
+}
+
+#[tauri::command]
+fn delete_mod(folder_name: String) -> Result<(), String> {
+    let local_dir = get_local_mods_dir()?;
+    let target = local_dir.join(&folder_name);
+    if target.exists() && target.is_dir() {
+        let _ = fs::remove_dir_all(&target);
+    }
+
+    let mut status_file = load_mod_status_file();
+    let path_needle_1 = format!("local//{}", folder_name);
+    let path_needle_2 = format!("local/{}", folder_name);
+    status_file.mods.retain(|m| {
+        !m.path.eq_ignore_ascii_case(&path_needle_1)
+            && !m.path.eq_ignore_ascii_case(&path_needle_2)
+            && !m.title.eq_ignore_ascii_case(&folder_name)
+    });
+    let _ = save_mod_status_file(&status_file);
+
+    Ok(())
+}
+
+#[tauri::command]
+fn open_mods_folder() -> Result<(), String> {
+    let local_dir = get_local_mods_dir()?;
+    let _ = Command::new("explorer").arg(&local_dir).spawn();
+    Ok(())
+}
+
+#[tauri::command]
+fn browse_mod_file() -> Result<Option<String>, String> {
+    let ps_cmd = r#"
+        Add-Type -AssemblyName System.Windows.Forms
+        $f = New-Object System.Windows.Forms.OpenFileDialog
+        $f.Filter = 'Mod Archive (*.zip)|*.zip|All Files (*.*)|*.*'
+        $f.Title = 'Select AoE2 DE Mod Zip Archive'
+        if ($f.ShowDialog() -eq 'OK') { $f.FileName }
+    "#;
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = Command::new("powershell");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = Command::new("powershell");
+
+    let output = cmd
+        .args(["-NoProfile", "-Command", ps_cmd])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(path))
+    }
+}
+
+fn install_mod_from_zip_path(zip_path: &Path) -> Result<String, String> {
+    if !zip_path.exists() {
+        return Err("Specified mod archive does not exist.".to_string());
+    }
+
+    let local_dir = get_local_mods_dir()?;
+    let temp_extract = local_dir.join("_temp_mod_extract");
+    if temp_extract.exists() {
+        let _ = fs::remove_dir_all(&temp_extract);
+    }
+    fs::create_dir_all(&temp_extract).map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = Command::new("tar");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = Command::new("tar");
+
+    let status = cmd
+        .args(["-xf", &zip_path.to_string_lossy(), "-C", &temp_extract.to_string_lossy()])
+        .status()
+        .map_err(|e| format!("Failed to extract archive: {}", e))?;
+
+    if !status.success() {
+        let _ = fs::remove_dir_all(&temp_extract);
+        return Err("Extraction failed. Please verify the archive is a valid .zip file.".to_string());
+    }
+
+    let mut entries = Vec::new();
+    if let Ok(read) = fs::read_dir(&temp_extract) {
+        for entry in read.flatten() {
+            entries.push(entry.path());
+        }
+    }
+
+    let default_mod_name = zip_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "New_Mod".to_string());
+
+    let final_mod_name;
+    if entries.len() == 1 && entries[0].is_dir() {
+        let inner_folder = &entries[0];
+        let inner_name = inner_folder
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| default_mod_name.clone());
+        final_mod_name = inner_name;
+        let dest = local_dir.join(&final_mod_name);
+        if dest.exists() {
+            let _ = fs::remove_dir_all(&dest);
+        }
+        let _ = fs::rename(inner_folder, &dest);
+        let _ = fs::remove_dir_all(&temp_extract);
+    } else {
+        final_mod_name = default_mod_name;
+        let dest = local_dir.join(&final_mod_name);
+        if dest.exists() {
+            let _ = fs::remove_dir_all(&dest);
+        }
+        let _ = fs::rename(&temp_extract, &dest);
+    }
+
+    let _ = toggle_mod(final_mod_name.clone(), true);
+
+    Ok(format!("Mod '{}' installed successfully!", final_mod_name))
+}
+
+#[tauri::command]
+async fn install_mod(source: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let raw = source.trim();
+        if raw.is_empty() {
+            return Err("Please enter a mod link or select a file.".to_string());
+        }
+
+        let as_path = PathBuf::from(raw);
+        if as_path.exists() && as_path.is_file() {
+            return install_mod_from_zip_path(&as_path);
+        }
+
+        if raw.starts_with("http://") || raw.starts_with("https://") {
+            if raw.to_lowercase().ends_with(".zip") || raw.contains("/download/") || raw.contains("blob.core.windows.net") {
+                let temp_zip = std::env::temp_dir().join(format!("aoe2_mod_{}.zip", generate_random_8digit_id()));
+
+                #[cfg(target_os = "windows")]
+                let mut cmd = Command::new("curl");
+                #[cfg(target_os = "windows")]
+                cmd.creation_flags(CREATE_NO_WINDOW);
+
+                #[cfg(not(target_os = "windows"))]
+                let mut cmd = Command::new("curl");
+
+                let res = cmd
+                    .args(["-L", "-o", &temp_zip.to_string_lossy(), raw])
+                    .output()
+                    .map_err(|e| format!("Failed to download mod: {}", e))?;
+
+                if !res.status.success() || !temp_zip.exists() {
+                    return Err("Failed to download mod archive from URL.".to_string());
+                }
+
+                let install_res = install_mod_from_zip_path(&temp_zip);
+                let _ = fs::remove_file(&temp_zip);
+                return install_res;
+            }
+
+            return Err(
+                "Microsoft requires account authentication to download directly from ageofempires.com.\n\nPlease download the mod .zip file from your browser, then click 'Browse...' here to install it in 1 second!"
+                    .to_string(),
+            );
+        }
+
+        Err("Invalid input. Please provide a direct download URL (.zip) or click 'Browse...' to select a local file.".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 #[tauri::command]
 fn start_drag(window: Window) -> Result<(), String> {
     window.start_dragging().map_err(|e| e.to_string())
@@ -1163,6 +1563,12 @@ pub fn run() {
             minimize_window,
             hide_to_tray,
             close_window,
+            list_installed_mods,
+            toggle_mod,
+            delete_mod,
+            open_mods_folder,
+            browse_mod_file,
+            install_mod,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
