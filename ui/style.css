@@ -1523,3 +1523,108 @@ body {
   background-color: rgba(239, 68, 68, 0.15);
   color: #ef4444;
 }
+/* --- MODS SUBNAV & RECOMMENDED MODS --- */
+.mods-subnav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.mods-subtab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mods-subtab:hover {
+  color: var(--text);
+  background-color: var(--bg-surface);
+}
+.mods-subtab.active {
+  color: var(--text);
+  background-color: var(--bg-card);
+  border-color: var(--border);
+}
+.recommended-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--text);
+  margin-top: 10px;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+.recommended-mods-container {
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+.rec-mod-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  gap: 12px;
+  transition: border-color 0.15s ease;
+}
+.rec-mod-card:hover {
+  border-color: var(--text-muted);
+}
+.rec-mod-left {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+.rec-mod-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rec-mod-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.rec-badge-installed {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  font-weight: bold;
+}
+.rec-badge-not-installed {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+}
+.rec-mod-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.rec-mod-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}

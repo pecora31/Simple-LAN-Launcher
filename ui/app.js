@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // TAURI V2 FRONTEND APPLICATION LOGIC
 // ==========================================
 
@@ -409,7 +409,12 @@ function showConfirmDialog(message, confirmText = 'Confirm', cancelText = 'Cance
     msgEl.textContent = message;
     inputWrapper.style.display = 'none';
     btnConfirm.textContent = confirmText;
-    btnCancel.textContent = cancelText;
+    if (cancelText && cancelText.trim()) {
+      btnCancel.style.display = "inline-flex";
+      btnCancel.textContent = cancelText;
+    } else {
+      btnCancel.style.display = "none";
+    }
 
     const close = (res) => {
       modal.classList.remove('active');
@@ -1085,6 +1090,7 @@ async function refreshInstalledMods() {
       card.appendChild(actions);
       installedModsList.appendChild(card);
     });
+      renderRecommendedMods(mods || []);
   } catch (err) {
     console.error('Error listing installed mods:', err);
   }

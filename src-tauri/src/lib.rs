@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+﻿use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -1465,6 +1465,21 @@ fn close_window(window: Window) -> Result<(), String> {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("cmd");
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let _ = cmd.args(["/c", "start", "", &url]).spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("xdg-open").arg(&url).spawn();
+    }
+    Ok(())
+}
+
 pub fn run() {
     // Single-instance protection: bind port first for instant 0ms check on primary launch
     let (single_instance_listener, is_secondary) = match TcpListener::bind(format!("127.0.0.1:{}", SINGLE_INSTANCE_PORT)) {
@@ -1569,6 +1584,7 @@ pub fn run() {
             open_mods_folder,
             browse_mod_file,
             install_mod,
+            open_external_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
